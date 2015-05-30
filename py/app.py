@@ -1,14 +1,9 @@
 #!/usr/bin/python
 
-import os, sys, Depthmap
+import os, sys, Depthmap, cv2
 
 def main():
-
-	depthmap = Depthmap.Depthmap()
-
-	try:
-		sys.stdin.readline()
-	except KeyboardInterrupt:
-		pass
+    depthmap = Depthmap.Depthmap()
+    cv2.waitKey()
 
 main()

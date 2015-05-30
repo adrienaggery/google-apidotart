@@ -1,28 +1,64 @@
-import os, sys, cv2, numpy
+import os, sys, cv2
+import numpy as np
 import time
-import redis
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)) + '/lib')
 import Leap
 
-img_layer = 4
-last_time = 0
+images = ['images/portrait_154984.jpg', 'images/portrait_272849.jpg', 'images/portrait_391404.jpg', 'images/portrait_512684.jpg']
+images = ['images/Homme{}.jpg'.format(i) for i in xrange(1, 5)]
+images.reverse()
 
+HEIGHT = None
+WIDTH = None
+N_LAYERS = len(images)
 
 MAP_WIDTH = 180
 CIRCLE_SIZE = 20
 
-r = redis.Redis()
+# Get min height and width, then crop
+for filename in images:
+    im = cv2.imread(filename)
+    if HEIGHT is None:
+        HEIGHT = im.shape[0]
+        WIDTH = im.shape[1]
+    else:
+        HEIGHT = min(HEIGHT, im.shape[0])
+        WIDTH = min(WIDTH, im.shape[1])
+
+SCALE = 2
+H_HEIGHT = HEIGHT / SCALE
+H_WIDTH = WIDTH / SCALE
+
+def crop_image(im):
+    im = im[:SCALE * H_HEIGHT, :SCALE * H_WIDTH, :]
+    return cv2.resize(im, (H_WIDTH, H_HEIGHT))
+
+cropped_im = [crop_image(cv2.imread(filename)) for filename in images]
+
+def create_blend(cropped_images, blend_mask):
+    blend = np.zeros((H_HEIGHT, H_WIDTH, 3)) # resulting blended image
+
+    for i in xrange(N_LAYERS - 1):
+        u = cropped_images[i]
+        v = cropped_images[i + 1]
+        m = np.ma.masked_outside(blend_mask, i, i+1) - i
+        s = 1 - m
+        blend[:, :, 0] += u[:, :, 0] * s + v[:, :, 0] * m
+        blend[:, :, 1] += u[:, :, 1] * s + v[:, :, 1] * m
+        blend[:, :, 2] += u[:, :, 2] * s + v[:, :, 2] * m
+    return np.clip(blend, 0, 255).astype(np.uint8)
 
 def makeGaussian(size, fwhm):
-	x = numpy.arange(0, size, 1, float)
-	y = x[:,numpy.newaxis]
+	x = np.arange(0, size, 1, float)
+	y = x[:,np.newaxis]
 	x0 = size // 2
 	y0 = size // 2
-	return numpy.exp(-4 * numpy.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / fwhm ** 2)
+	return np.exp(-4 * np.log(2) * ((x - x0) ** 2 + (y - y0) ** 2) / fwhm ** 2)
 
-mask_map = numpy.ones((MAP_WIDTH, MAP_WIDTH))
+mask_map = np.ones((MAP_WIDTH, MAP_WIDTH))
 hand_matrix = makeGaussian(CIRCLE_SIZE, CIRCLE_SIZE/2) * 0.005
+last_time = 0
 
 
 class LeapListener(Leap.Listener):
@@ -42,12 +78,16 @@ class LeapListener(Leap.Listener):
             py = cy - CIRCLE_SIZE/2
             if (px >= 0 and px <= MAP_WIDTH - CIRCLE_SIZE and py >= 0 and py < MAP_WIDTH - CIRCLE_SIZE):
                 mask_map[py:py + CIRCLE_SIZE, px:px + CIRCLE_SIZE] -= hand_matrix * strength
-                mask_map = numpy.clip(mask_map, 0, img_layer - 1)
                 if time.time() - last_time >= 0.1:
                     last_time = time.time()
-                    r['mask'] = mask_map.tostring()
-                    r['lastx'] = cx
-                    r['lasty'] = cy
+                    mask_map = np.clip(mask_map, 0, 1) * (N_LAYERS - 1)
+                    blend_mask = cv2.resize(mask_map, (H_WIDTH, H_HEIGHT))
+                    blend = create_blend(cropped_im, blend_mask)
+                    x = int(px * H_WIDTH / MAP_WIDTH)
+                    y = int(py * H_HEIGHT / MAP_WIDTH)
+                    cv2.circle(blend, (x-5, y-5), 5, (255, 0, 0))
+                    im = cv2.resize(blend, (SCALE * H_WIDTH, SCALE * H_HEIGHT))
+                    cv2.imshow("debug", im)
 
 class Depthmap():
 	def __init__(self):
@@ -55,3 +95,4 @@ class Depthmap():
 		self.listener = LeapListener()
 		self.controller = Leap.Controller()
 		self.controller.add_listener(self.listener)
+        cv2.namedWindow("debug")
