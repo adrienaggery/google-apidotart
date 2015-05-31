@@ -1,6 +1,12 @@
 import os, sys, cv2
 import numpy as np
 import time
+import audio
+import random
+
+p = audio.Player()
+p.start()
+p.play(20)
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)) + '/lib')
 import Leap
@@ -63,6 +69,19 @@ mask_map = np.ones((MAP_WIDTH, MAP_WIDTH))
 hand_matrix = makeGaussian(CIRCLE_SIZE, CIRCLE_SIZE / 2) / N_LAYERS / 40
 last_time = 0
 
+last_audio_time = 0
+play_chord = 0.0
+
+while True:
+    if time.time() - last_audio_time >= 1.2:
+        last_audio_time = time.time()
+        n = 20 + random.randint(0, 4)
+        m = None
+        play_chord += (random.random() - 0.5) * 0.25
+        play_chord = max(0, min(1, play_chord))
+        if play_chord < 0.5:
+            m = 30 + random.randint(0, 8)
+        p.play(n, m)
 
 class LeapListener(Leap.Listener):
     def on_connect(self, controller):
@@ -79,6 +98,13 @@ class LeapListener(Leap.Listener):
             cy = int(pos.z * MAP_WIDTH)
             px = cx - CIRCLE_SIZE / 2
             py = cy - CIRCLE_SIZE / 2
+            if time.time() - last_audio_time >= 1.0:
+                last_audio_time = time.time()
+                n = 20 + random.randint(0, 4)
+                m = None
+                if random.random() < 0.5:
+                    m = 30 + random.randint(0, 8)
+                p.play(n, m)
             if (px >= 0 and px <= MAP_WIDTH - CIRCLE_SIZE and py >= 0 and py < MAP_WIDTH - CIRCLE_SIZE):
                 mask_map[py:py + CIRCLE_SIZE, px:px + CIRCLE_SIZE] -= hand_matrix * strength
                 if time.time() - last_time >= 0.01:
