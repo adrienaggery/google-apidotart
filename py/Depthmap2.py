@@ -173,7 +173,7 @@ class LeapListener(Leap.Listener):
                     y = int(cy * H_HEIGHT / float(MAP_WIDTH))
                     im = cv2.resize(blend, (UP_SCALE * SCALE * H_WIDTH, UP_SCALE * SCALE * H_HEIGHT))
                     cv2.circle(im, (UP_SCALE * SCALE * x, UP_SCALE * SCALE * y), UP_SCALE * SCALE * 5, (255, 0, 0), 1)
-                    cv2.imshow("debug", im)
+                    cv2.imshow("Vanitas", im)
         if not(cv2.waitKey(10)):
             p.stop()
             import sys
@@ -186,4 +186,4 @@ class Depthmap():
         self.listener = LeapListener()
         self.controller = Leap.Controller()
         self.controller.add_listener(self.listener)
-        cv2.namedWindow("debug")
+        cv2.namedWindow("Vanitas")
