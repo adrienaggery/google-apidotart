@@ -11,7 +11,7 @@ p.play(20)
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)) + '/lib')
 import Leap
 
-#images = ['images/Femme{}.jpg'.format(i) for i in xrange(1, 6)]
+images = ['images/Femme{}.jpg'.format(i) for i in xrange(1, 6)]
 images = ['images/Homme{}.jpg'.format(i) for i in xrange(1, 5)]
 images.reverse()
 
