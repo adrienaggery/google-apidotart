@@ -1,8 +1,11 @@
+# encoding: utf-8
 import os, sys, cv2
 import numpy as np
 import time
 import audio
 import random
+import requests
+import json
 
 p = audio.Player()
 p.start()
@@ -11,13 +14,60 @@ p.play(20)
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)) + '/lib')
 import Leap
 
-images = ['images/Femme{}.jpg'.format(i) for i in xrange(1, 6)]
-images = ['images/Homme{}.jpg'.format(i) for i in xrange(1, 5)]
+images = ['images/morpion{}.jpg'.format(i) for i in xrange(1, 4)]
 images.reverse()
+
+fready = 1
+APIKEY = '867c6f9152a839360b3619a4b11eb87de567e86b9184627016ced9a4bdb7091e'
+keywords = ['écorché', 'crâne humain (représenté)', 'allégorie de la Mort', 'autoportrait', 'voile (tissu)', 'fantôme', 'Narcisse (mythologie)', 'miroir', 'arbre mort']
+
+def generateImages(apikey):
+    images = {}
+    for keyword in keywords:
+        req = requests.get('http://api.art.rmngp.fr:80/v1/works', params={'facets[keywords]': keyword, 'lang': 'fr'}, headers={'ApiKey': apikey})
+        if (req.status_code == 200):
+            rep = req.json()
+            json.dump(rep, open('rep.json', 'w'))
+            hits = rep['hits']['hits']
+            works = [{'id': hit['_id'], 'url': hit['_source']['images'][0]['urls']['large']['url']} for hit in hits]
+            images[keyword] = works
+            for work in works:
+                import os
+                if not(os.path.exists('images/im-{}.jpg'.format(work['id']))):
+                    print 'download {}'.format(work['id'])
+                    r = requests.get(work['url'])
+                    if r.status_code == 200:
+                        path = 'images/im-{}.jpg'.format(work['id'])
+                        with open(path, 'wb') as f:
+                            for chunk in r.iter_content(1024):
+                                f.write(chunk)
+    return images
+imageDict = generateImages(APIKEY)
+
+T_W = 210
+T_H = 165
+
+im = np.zeros((3 * T_H, 3 * T_W, 3), dtype=np.uint8)
+for i, keyword in enumerate(keywords):
+    x = i % 3
+    y = i // 3
+    work = random.choice(imageDict[keyword])
+    work_im = cv2.imread('images/im-{}.jpg'.format(work['id']))
+    (h, w, c) = work_im.shape
+    if T_H / float(h) < T_W / float(w):
+        r = T_W / float(w)
+    else:
+        r = T_H / float(h)
+    work_im = cv2.resize(work_im, (int(r * w), int(r * h)))
+    work_im = work_im[:T_H, :T_W, :]
+    (h, w, c) = work_im.shape
+    im[y * T_H:(y + 1) * h, x * T_W:(x + 1) * w] = work_im
+imBlended = im
+
 
 HEIGHT = None
 WIDTH = None
-N_LAYERS = len(images)
+N_LAYERS = len(images) + 1
 
 MAP_WIDTH = 180
 CIRCLE_SIZE = 40
@@ -41,7 +91,9 @@ def crop_image(im):
     im = im[:SCALE * H_HEIGHT, :SCALE * H_WIDTH, :]
     return cv2.resize(im, (H_WIDTH, H_HEIGHT))
 
-cropped_im = [crop_image(cv2.imread(filename)) for filename in images]
+images = [cv2.imread(filename) for filename in images]
+images = [imBlended] + images
+cropped_im = [crop_image(im) for im in images]
 
 def create_blend(cropped_images, blend_mask):
     blend = np.zeros((H_HEIGHT, H_WIDTH, 3)) # resulting blended image
@@ -121,7 +173,7 @@ class LeapListener(Leap.Listener):
                     y = int(cy * H_HEIGHT / float(MAP_WIDTH))
                     im = cv2.resize(blend, (UP_SCALE * SCALE * H_WIDTH, UP_SCALE * SCALE * H_HEIGHT))
                     cv2.circle(im, (UP_SCALE * SCALE * x, UP_SCALE * SCALE * y), UP_SCALE * SCALE * 5, (255, 0, 0), 1)
-                    cv2.imshow("Vanitas", im)
+                    cv2.imshow("debug", im)
         if not(cv2.waitKey(10)):
             p.stop()
             import sys
@@ -134,4 +186,4 @@ class Depthmap():
         self.listener = LeapListener()
         self.controller = Leap.Controller()
         self.controller.add_listener(self.listener)
-        cv2.namedWindow("Vanitas")
+        cv2.namedWindow("debug")
