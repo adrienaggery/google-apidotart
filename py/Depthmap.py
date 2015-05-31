@@ -71,17 +71,26 @@ last_time = 0
 
 last_audio_time = 0
 play_chord = 0.0
+next_delta = 1.0
+depth = 0
 
-while True:
-    if time.time() - last_audio_time >= 1.2:
+
+def play_sound(darkness):
+    global last_audio_time
+    global play_chord
+    global next_delta
+    depth = 1 + int(min(1, darkness + 0.5 * random.random()) * 10)
+    if time.time() - last_audio_time >= next_delta:
         last_audio_time = time.time()
-        n = 20 + random.randint(0, 4)
+        next_delta = 0.8 + random.random() * 0.2
+        n = 26 + random.randint(0, 4) - depth
         m = None
         play_chord += (random.random() - 0.5) * 0.25
         play_chord = max(0, min(1, play_chord))
         if play_chord < 0.5:
-            m = 30 + random.randint(0, 8)
+            m = 36 + random.randint(0, 4) - depth
         p.play(n, m)
+
 
 class LeapListener(Leap.Listener):
     def on_connect(self, controller):
@@ -98,15 +107,11 @@ class LeapListener(Leap.Listener):
             cy = int(pos.z * MAP_WIDTH)
             px = cx - CIRCLE_SIZE / 2
             py = cy - CIRCLE_SIZE / 2
-            if time.time() - last_audio_time >= 1.0:
-                last_audio_time = time.time()
-                n = 20 + random.randint(0, 4)
-                m = None
-                if random.random() < 0.5:
-                    m = 30 + random.randint(0, 8)
-                p.play(n, m)
+
             if (px >= 0 and px <= MAP_WIDTH - CIRCLE_SIZE and py >= 0 and py < MAP_WIDTH - CIRCLE_SIZE):
                 mask_map[py:py + CIRCLE_SIZE, px:px + CIRCLE_SIZE] -= hand_matrix * strength
+                darkness = max(0, min(1, 1.0 - np.exp(10 * np.log(mask_map.mean()))))
+                play_sound(darkness)
                 if time.time() - last_time >= 0.01:
                     last_time = time.time()
                     blend_mask = np.clip(mask_map, 0, 1.0) * (N_LAYERS - 1)
@@ -114,9 +119,14 @@ class LeapListener(Leap.Listener):
                     blend = create_blend(cropped_im, blend_mask)
                     x = int(cx * H_WIDTH / float(MAP_WIDTH))
                     y = int(cy * H_HEIGHT / float(MAP_WIDTH))
-                    cv2.circle(blend, (x, y), 5, (255, 0, 0))
                     im = cv2.resize(blend, (UP_SCALE * SCALE * H_WIDTH, UP_SCALE * SCALE * H_HEIGHT))
+                    cv2.circle(im, (UP_SCALE * SCALE * x, UP_SCALE * SCALE * y), UP_SCALE * SCALE * 5, (255, 0, 0), 1)
                     cv2.imshow("debug", im)
+        if not(cv2.waitKey(10)):
+            p.stop()
+            import sys
+            sys.exit(0)
+
 
 class Depthmap():
     def __init__(self):
